@@ -1,0 +1,134 @@
+complete_chore:
+  name: Complete chore
+  description: Mark a chore as completed for a specific person
+  fields:
+    chore_instance_id:
+      name: Chore instance ID
+      description: The ID of the chore instance to complete
+      required: true
+      selector:
+        text:
+    person_id:
+      name: Person ID
+      description: The ID of the person completing the chore
+      required: true
+      selector:
+        text:
+
+reset_chore:
+  name: Reset chore
+  description: Reset a chore completion status for a specific person
+  fields:
+    chore_instance_id:
+      name: Chore instance ID
+      description: The ID of the chore instance to reset
+      required: true
+      selector:
+        text:
+    person_id:
+      name: Person ID
+      description: The ID of the person to reset the chore for
+      required: true
+      selector:
+        text:
+
+add_chore:
+  name: Add chore
+  description: Add a new chore to the system
+  fields:
+    name:
+      name: Chore name
+      description: Name of the chore
+      required: true
+      selector:
+        text:
+    description:
+      name: Description
+      description: Description of the chore
+      required: false
+      selector:
+        text:
+          multiline: true
+    assigned_people:
+      name: Assigned people
+      description: List of person IDs assigned to this chore
+      required: true
+      selector:
+        select:
+          multiple: true
+          options: []
+    time_period:
+      name: Time period
+      description: When the chore should be active
+      required: true
+      default: "all_day"
+      selector:
+        select:
+          options:
+            - label: "Morning"
+              value: "morning"
+            - label: "Afternoon" 
+              value: "afternoon"
+            - label: "Evening"
+              value: "evening"
+            - label: "All Day"
+              value: "all_day"
+    recurrence_type:
+      name: Recurrence type
+      description: How often the chore repeats
+      required: true
+      default: "daily"
+      selector:
+        select:
+          options:
+            - label: "Daily"
+              value: "daily"
+            - label: "Weekly"
+              value: "weekly"
+            - label: "Monthly"
+              value: "monthly"
+            - label: "Once"
+              value: "once"
+    weekday:
+      name: Weekday
+      description: Day of the week (0=Monday, 6=Sunday) for weekly recurrence
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 6
+          mode: slider
+    day:
+      name: Day of month
+      description: Day of the month for monthly recurrence
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 31
+          mode: slider
+    required:
+      name: Required
+      description: Whether this chore is required or optional
+      required: false
+      default: true
+      selector:
+        boolean:
+    completion_automation:
+      name: Completion automation
+      description: Automation to trigger when chore is completed
+      required: false
+      selector:
+        entity:
+          domain: automation
+
+remove_chore:
+  name: Remove chore
+  description: Remove a chore from the system
+  fields:
+    chore_id:
+      name: Chore ID
+      description: The ID of the chore to remove
+      required: true
+      selector:
+        text:

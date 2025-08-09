@@ -1,0 +1,13 @@
+{
+  "domain": "chorenet",
+  "name": "ChoreNet",
+  "version": "1.0.0",
+  "documentation": "https://github.com/yourusername/chorenet",
+  "issue_tracker": "https://github.com/yourusername/chorenet/issues",
+  "dependencies": [],
+  "codeowners": ["@yourusername"],
+  "requirements": [],
+  "config_flow": true,
+  "integration_type": "hub",
+  "iot_class": "calculated"
+}
