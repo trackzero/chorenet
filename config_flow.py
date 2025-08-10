@@ -108,9 +108,26 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Manage the options."""
-        return self.async_show_menu(
+        if user_input is not None:
+            menu_selection = user_input.get("menu_selection")
+            if menu_selection == "people":
+                return await self.async_step_people()
+            elif menu_selection == "chores":
+                return await self.async_step_chores()
+        
+        return self.async_show_form(
             step_id="init",
-            menu_options=["people", "chores"],
+            data_schema=vol.Schema({
+                vol.Required("menu_selection"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            {"value": "people", "label": "Manage People"},
+                            {"value": "chores", "label": "Manage Chores"},
+                        ],
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+            }),
         )
 
     async def async_step_people(
