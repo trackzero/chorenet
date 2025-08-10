@@ -25,6 +25,7 @@ from .const import (
     EVENT_CHORE_COMPLETED,
     EVENT_ALL_CHORES_COMPLETED,
     EVENT_CHORES_ACTIVATED,
+    EVENT_PERSON_COMPLETED,
     CHORE_STATUS_PENDING,
     CHORE_STATUS_COMPLETED,
     CHORE_STATUS_OVERDUE,
@@ -293,7 +294,7 @@ class ChoreNetCoordinator(DataUpdateCoordinator):
             
         instance["completions"][person_id] = True
         
-        # Check if chore is fully completed
+        # Check if chore is fully completed by all assigned people
         assigned_people = instance["assigned_people"]
         if all(instance["completions"].get(pid, False) for pid in assigned_people):
             instance["status"] = CHORE_STATUS_COMPLETED
@@ -305,7 +306,7 @@ class ChoreNetCoordinator(DataUpdateCoordinator):
                 "instance": instance,
             })
             
-            # Trigger automation if specified
+            # Trigger automation if specified for this chore
             if chore and chore.get("completion_automation"):
                 await self.hass.services.async_call(
                     "automation", "trigger",
@@ -313,8 +314,49 @@ class ChoreNetCoordinator(DataUpdateCoordinator):
                     blocking=False
                 )
         
+        # Check if this person has completed ALL their chores
+        await self._check_person_all_chores_completed(person_id)
+        
         await self._save_data()
         return True
+
+    async def _check_person_all_chores_completed(self, person_id: str) -> None:
+        """Check if a person has completed all their assigned chores and fire event."""
+        person = self._people.get(person_id)
+        if not person:
+            return
+        
+        # Get all active chore instances assigned to this person
+        person_active_chores = []
+        for instance in self._chore_instances.values():
+            if (
+                person_id in instance.get("assigned_people", [])
+                and instance.get("status") in [CHORE_STATUS_PENDING, CHORE_STATUS_OVERDUE]
+            ):
+                person_active_chores.append(instance)
+        
+        # Check if all are completed by this person
+        if person_active_chores:
+            all_completed = all(
+                instance.get("completions", {}).get(person_id, False)
+                for instance in person_active_chores
+            )
+            
+            if all_completed:
+                # Fire person completed event
+                self.hass.bus.async_fire(EVENT_PERSON_COMPLETED, {
+                    "person_id": person_id,
+                    "person_name": person.get("name", person_id),
+                    "completed_chores": person_active_chores,
+                })
+                
+                # Trigger person's completion automation if specified
+                if person.get("completion_automation"):
+                    await self.hass.services.async_call(
+                        "automation", "trigger",
+                        {"entity_id": person["completion_automation"]},
+                        blocking=False
+                    )
 
     async def _save_data(self) -> None:
         """Save data to storage."""

@@ -180,21 +180,51 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
             if person_id in self._people:
                 errors["person_id"] = "Person ID already exists"
             else:
+                # Get automation entities for per-person completion
+                automation_entities = [
+                    entity.entity_id for entity in self.hass.states.async_all()
+                    if entity.entity_id.startswith("automation.")
+                ]
+                automation_options = [{"value": "", "label": "None"}] + [
+                    {"value": entity_id, "label": entity_id} for entity_id in automation_entities
+                ]
+                
                 self._people[person_id] = {
                     "name": user_input["name"],
                     "person_id": person_id,
                     "time_windows": DEFAULT_TIME_WINDOWS.copy(),
+                    "completion_automation": user_input.get("completion_automation"),
                 }
                 self._current_person_id = person_id
                 return await self.async_step_configure_time_windows()
+
+        # Get automation entities for selection
+        automation_entities = [
+            entity.entity_id for entity in self.hass.states.async_all()
+            if entity.entity_id.startswith("automation.")
+        ]
+        automation_options = [{"value": "", "label": "None"}] + [
+            {"value": entity_id, "label": entity_id} for entity_id in automation_entities
+        ]
 
         return self.async_show_form(
             step_id="add_person",
             data_schema=vol.Schema({
                 vol.Required("name"): str,
                 vol.Required("person_id"): str,
+                vol.Optional("completion_automation"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=automation_options,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
             }),
             errors=errors,
+            description_placeholders={
+                "name_help": "The display name for this person (e.g., 'Alice', 'Mom', 'Kid1')",
+                "person_id_help": "A unique identifier for this person. Use lowercase letters and underscores only (e.g., 'alice', 'mom', 'kid_1'). This cannot be changed later.",
+                "automation_help": "Optional: Select an automation to trigger when this person completes ALL their assigned chores."
+            },
         )
 
     async def async_step_configure_time_windows(
@@ -229,7 +259,8 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
                 vol.Required(CONF_EVENING_END, default=time_windows.get(CONF_EVENING_END, "22:00")): str,
             }),
             description_placeholders={
-                "person_name": person.get("name", "Unknown")
+                "person_name": person.get("name", "Unknown"),
+                "time_help": "Configure when morning, afternoon, and evening time periods are active for this person. Use 24-hour format (e.g., 06:00, 18:00). Chores assigned to specific time periods will only become active during these windows."
             },
         )
 
@@ -382,6 +413,17 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
             step_id="add_chore",
             data_schema=schema,
             errors=errors,
+            description_placeholders={
+                "chore_help": "Configure a new chore with its schedule and assignments",
+                "name_help": "Display name for the chore (e.g., 'Take out trash', 'Do dishes')",
+                "chore_id_help": "Unique identifier using lowercase letters and underscores (e.g., 'trash', 'dishes')",
+                "description_help": "Optional: Additional details about the chore",
+                "assigned_people_help": "Select one or more people. For multi-person chores, any assigned person can mark it complete",
+                "time_period_help": "When this chore becomes active. 'All Day' is always active, others follow person's time windows",
+                "recurrence_help": "How often: Daily (every day), Weekly (specific weekday), Monthly (specific date), Once (single occurrence)",
+                "required_help": "Required chores must be completed, optional chores are nice-to-have",
+                "automation_help": "Optional: Automation to trigger when this specific chore is completed by ALL assigned people"
+            },
         )
 
     async def async_step_select_person_to_edit(

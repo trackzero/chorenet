@@ -56,6 +56,7 @@ SERVICE_REMOVE_CHORE = "remove_chore"
 EVENT_CHORE_COMPLETED = f"{DOMAIN}_chore_completed"
 EVENT_ALL_CHORES_COMPLETED = f"{DOMAIN}_all_chores_completed"
 EVENT_CHORES_ACTIVATED = f"{DOMAIN}_chores_activated"
+EVENT_PERSON_COMPLETED = f"{DOMAIN}_person_completed"
 
 # Update interval
 UPDATE_INTERVAL = 60  # seconds

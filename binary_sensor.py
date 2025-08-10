@@ -40,6 +40,7 @@ async def async_setup_entry(
     # Create per-person "has active chores" binary sensors
     for person_id, person in coordinator.people.items():
         entities.append(PersonHasActiveChoresSensor(coordinator, person_id, person))
+        entities.append(PersonAllChoresCompletedSensor(coordinator, person_id, person))
     
     async_add_entities(entities)
 
@@ -218,4 +219,73 @@ class PersonHasActiveChoresSensor(ChoreNetBinarySensorBase):
             "overdue_chores_count": overdue_count,
             "required_chores_count": required_count,
             "optional_chores_count": optional_count,
+        }
+
+
+class PersonAllChoresCompletedSensor(ChoreNetBinarySensorBase):
+    """Binary sensor indicating if a person has completed all their assigned chores."""
+
+    def __init__(
+        self,
+        coordinator: ChoreNetCoordinator,
+        person_id: str,
+        person: dict[str, Any],
+    ) -> None:
+        """Initialize the person all chores completed sensor."""
+        super().__init__(coordinator)
+        self._person_id = person_id
+        self._person = person
+        self._attr_name = f"{person.get('name', person_id)} All Chores Completed"
+        self._attr_unique_id = f"{DOMAIN}_{person_id}_all_chores_completed"
+        self._attr_icon = "mdi:account-check"
+
+    @property
+    def is_on(self) -> bool:
+        """Return true if the person has completed all their assigned chores."""
+        # Get all active chore instances assigned to this person
+        person_active_chores = []
+        for instance in self.coordinator.chore_instances.values():
+            if (
+                self._person_id in instance.get("assigned_people", [])
+                and instance.get("status") in [CHORE_STATUS_PENDING, CHORE_STATUS_OVERDUE]
+            ):
+                person_active_chores.append(instance)
+        
+        # If no active chores, return False (nothing to complete)
+        if not person_active_chores:
+            return False
+        
+        # Check if all are completed by this person
+        return all(
+            instance.get("completions", {}).get(self._person_id, False)
+            for instance in person_active_chores
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        person_active_chores = []
+        completed_chores = []
+        
+        for instance in self.coordinator.chore_instances.values():
+            if (
+                self._person_id in instance.get("assigned_people", [])
+                and instance.get("status") in [CHORE_STATUS_PENDING, CHORE_STATUS_OVERDUE]
+            ):
+                person_active_chores.append(instance)
+                if instance.get("completions", {}).get(self._person_id, False):
+                    chore = self.coordinator.chores.get(instance["chore_id"], {})
+                    completed_chores.append({
+                        "name": chore.get("name", "Unknown"),
+                        "due_date": instance.get("due_date"),
+                        "required": chore.get("required", True),
+                    })
+        
+        return {
+            "person_id": self._person_id,
+            "person_name": self._person.get("name", self._person_id),
+            "total_assigned_chores": len(person_active_chores),
+            "completed_chores_count": len(completed_chores),
+            "completed_chores": completed_chores,
+            "completion_automation": self._person.get("completion_automation"),
         }
