@@ -56,7 +56,7 @@ class ChoreNetBinarySensorBase(CoordinatorEntity, BinarySensorEntity):
             "name": "ChoreNet",
             "manufacturer": "ChoreNet",
             "model": "Chore Tracker",
-            "sw_version": "1.0.0",
+            "sw_version": coordinator.hass.data[DOMAIN].get("build_version", "1.0.3"),
         }
 
 

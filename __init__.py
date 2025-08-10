@@ -64,9 +64,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = ChoreNetCoordinator(hass, store, config_data, entry)
     await coordinator.async_config_entry_first_refresh()
     
-    # Store coordinator in hass data
+    # Store coordinator and build version in hass data
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
+    
+    # Load build version from manifest
+    import json
+    import os
+    
+    try:
+        manifest_path = os.path.join(os.path.dirname(__file__), "manifest.json")
+        with open(manifest_path, "r") as f:
+            manifest = json.load(f)
+        hass.data[DOMAIN]["build_version"] = manifest.get("version", "1.0.3")
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        hass.data[DOMAIN]["build_version"] = "1.0.3"
     
     # Setup platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

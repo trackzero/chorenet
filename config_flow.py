@@ -666,29 +666,50 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             return await self.async_step_people()
 
-        people_details = []
+        if not self._people:
+            return self.async_show_form(
+                step_id="list_people",
+                data_schema=vol.Schema({
+                    vol.Required("back", default="Back to People Menu"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[{"value": "back", "label": "← Back to People Menu"}],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }),
+                errors={"base": "No people have been configured yet."},
+            )
+
+        # Create a selector with all people details
+        people_options = []
         for person_id, person in self._people.items():
             time_windows = person.get("time_windows", {})
-            automation = person.get("completion_automation", "None")
+            automation = person.get("completion_automation")
             
-            details = f"• {person.get('name', person_id)} (ID: {person_id})\n"
-            details += f"  Morning: {time_windows.get('morning_start', '06:00')}-{time_windows.get('morning_end', '12:00')}\n"
-            details += f"  Afternoon: {time_windows.get('afternoon_start', '12:00')}-{time_windows.get('afternoon_end', '18:00')}\n"
-            details += f"  Evening: {time_windows.get('evening_start', '18:00')}-{time_windows.get('evening_end', '22:00')}\n"
-            details += f"  Completion Automation: {automation if automation else 'None'}"
+            label = f"{person.get('name', person_id)} | "
+            label += f"Morning: {time_windows.get('morning_start', '06:00')}-{time_windows.get('morning_end', '12:00')} | "
+            label += f"Afternoon: {time_windows.get('afternoon_start', '12:00')}-{time_windows.get('afternoon_end', '18:00')} | "
+            label += f"Evening: {time_windows.get('evening_start', '18:00')}-{time_windows.get('evening_end', '22:00')} | "
+            label += f"Automation: {automation.split('.')[-1] if automation else 'None'}"
             
-            people_details.append(details)
+            people_options.append({
+                "value": person_id,
+                "label": label
+            })
 
-        people_list = "\n\n".join(people_details) if people_details else "No people configured"
+        # Add back option
+        people_options.append({"value": "back", "label": "← Back to People Menu"})
 
         return self.async_show_form(
             step_id="list_people",
             data_schema=vol.Schema({
-                vol.Required("continue", default=True): bool,
+                vol.Required("selected_person"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=people_options,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
             }),
-            description_placeholders={
-                "people_details": f"Configured People:\n\n{people_list}"
-            },
         )
 
     async def async_step_list_chores(
@@ -698,32 +719,52 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             return await self.async_step_chores()
 
-        chores_details = []
+        if not self._chores:
+            return self.async_show_form(
+                step_id="list_chores",
+                data_schema=vol.Schema({
+                    vol.Required("back", default="Back to Chores Menu"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[{"value": "back", "label": "← Back to Chores Menu"}],
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }),
+                errors={"base": "No chores have been configured yet."},
+            )
+
+        # Create a selector with all chore details
+        chores_options = []
         for chore_id, chore in self._chores.items():
             recurrence = chore.get("recurrence", {})
             assigned_names = [self._people.get(pid, {}).get("name", pid) for pid in chore.get("assigned_people", [])]
             
-            details = f"• {chore.get('name', chore_id)} (ID: {chore_id})\n"
-            details += f"  Description: {chore.get('description', 'None')}\n"
-            details += f"  Assigned to: {', '.join(assigned_names) if assigned_names else 'No one'}\n"
-            details += f"  Time Period: {chore.get('time_period', 'all_day').replace('_', ' ').title()}\n"
-            details += f"  Recurrence: {recurrence.get('type', 'daily').title()}\n"
-            details += f"  Required: {'Yes' if chore.get('required', True) else 'No'}\n"
-            details += f"  Enabled: {'Yes' if chore.get('enabled', True) else 'No'}\n"
-            details += f"  Completion Automation: {chore.get('completion_automation', 'None') if chore.get('completion_automation') else 'None'}"
+            label = f"{chore.get('name', chore_id)} | "
+            label += f"Assigned: {', '.join(assigned_names[:2]) if assigned_names else 'None'}"
+            if len(assigned_names) > 2:
+                label += f" +{len(assigned_names)-2} more"
+            label += f" | {chore.get('time_period', 'all_day').replace('_', ' ').title()}"
+            label += f" | {recurrence.get('type', 'daily').title()}"
+            label += f" | {'Required' if chore.get('required', True) else 'Optional'}"
             
-            chores_details.append(details)
+            chores_options.append({
+                "value": chore_id,
+                "label": label
+            })
 
-        chores_list = "\n\n".join(chores_details) if chores_details else "No chores configured"
+        # Add back option
+        chores_options.append({"value": "back", "label": "← Back to Chores Menu"})
 
         return self.async_show_form(
             step_id="list_chores",
             data_schema=vol.Schema({
-                vol.Required("continue", default=True): bool,
+                vol.Required("selected_chore"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=chores_options,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
             }),
-            description_placeholders={
-                "chores_details": f"Configured Chores:\n\n{chores_list}"
-            },
         )
 
     async def _update_options(self) -> FlowResult:
