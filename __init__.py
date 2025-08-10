@@ -36,6 +36,8 @@ from .const import (
     RECURRENCE_DAILY,
     RECURRENCE_WEEKLY,
     RECURRENCE_MONTHLY,
+    CONF_PEOPLE,
+    CONF_CHORES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -50,8 +52,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
     data = await store.async_load() or {}
     
+    # Merge storage data with config entry options
+    config_data = {
+        "people": entry.options.get(CONF_PEOPLE, {}),
+        "chores": entry.options.get(CONF_CHORES, {}),
+        "chore_instances": data.get("chore_instances", {}),
+    }
+    
     # Initialize coordinator
-    coordinator = ChoreNetCoordinator(hass, store, data, entry)
+    coordinator = ChoreNetCoordinator(hass, store, config_data, entry)
     await coordinator.async_config_entry_first_refresh()
     
     # Store coordinator in hass data

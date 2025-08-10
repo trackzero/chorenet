@@ -1,7 +1,6 @@
 {
   "name": "ChoreNet",
   "content_in_root": true,
-  "filename": "chorenet.zip",
   "country": ["US", "CA", "GB", "AU", "NZ", "DE", "FR", "ES", "IT", "NL", "NO", "SE", "DK", "FI"],
   "homeassistant": "2023.1.0"
 }
