@@ -1,7 +1,7 @@
 {
   "domain": "chorenet",
   "name": "ChoreNet",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "documentation": "https://github.com/trackzero/chorenet",
   "issue_tracker": "https://github.com/trackzero/chorenet/issues",
   "dependencies": [],
@@ -9,6 +9,5 @@
   "requirements": [],
   "config_flow": true,
   "integration_type": "hub",
-  "iot_class": "calculated",
-  "icon": "mdi:clipboard-list"
+  "iot_class": "calculated"
 }
