@@ -477,6 +477,185 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
             }),
         )
 
+    async def async_step_select_chore_to_edit(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Select chore to edit."""
+        if user_input is not None:
+            self._current_chore_id = user_input["chore_id"]
+            return await self.async_step_edit_chore()
+
+        chores_options = [
+            {"value": chore_id, "label": chore.get("name", chore_id)}
+            for chore_id, chore in self._chores.items()
+        ]
+
+        if not chores_options:
+            return self.async_show_form(
+                step_id="select_chore_to_edit",
+                errors={"base": "No chores configured to edit."},
+                data_schema=vol.Schema({}),
+            )
+
+        return self.async_show_form(
+            step_id="select_chore_to_edit",
+            data_schema=vol.Schema({
+                vol.Required("chore_id"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=chores_options,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+            }),
+        )
+
+    async def async_step_edit_chore(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Handle editing a chore."""
+        errors: dict[str, str] = {}
+        current_chore = self._chores.get(self._current_chore_id, {})
+
+        if user_input is not None:
+            # Get people options for assignment
+            people_options = [
+                {"value": person_id, "label": person.get("name", person_id)}
+                for person_id, person in self._people.items()
+            ]
+            
+            if not people_options:
+                errors["base"] = "No people configured. Add people first."
+            else:
+                recurrence_data = {}
+                recurrence_type = user_input["recurrence_type"]
+                
+                if recurrence_type == RECURRENCE_WEEKLY:
+                    recurrence_data["weekday"] = user_input.get("weekday", 0)
+                elif recurrence_type == RECURRENCE_MONTHLY:
+                    recurrence_data["day"] = user_input.get("day", 1)
+                
+                self._chores[self._current_chore_id] = {
+                    "name": user_input["name"],
+                    "chore_id": self._current_chore_id,
+                    "description": user_input.get("description", ""),
+                    "assigned_people": user_input["assigned_people"],
+                    "time_period": user_input["time_period"],
+                    "required": user_input.get("required", True),
+                    "enabled": user_input.get("enabled", True),
+                    "recurrence": {
+                        "type": recurrence_type,
+                        **recurrence_data
+                    },
+                    "completion_automation": user_input.get("completion_automation"),
+                }
+                self._current_chore_id = None
+                return await self.async_step_chores()
+
+        if errors.get("base"):
+            return self.async_show_form(
+                step_id="edit_chore",
+                errors=errors,
+            )
+
+        people_options = [
+            {"value": person_id, "label": person.get("name", person_id)}
+            for person_id, person in self._people.items()
+        ]
+
+        # Get automation entities for selection
+        automation_entities = [
+            entity.entity_id for entity in self.hass.states.async_all()
+            if entity.entity_id.startswith("automation.")
+        ]
+        automation_options = [{"value": "", "label": "None"}] + [
+            {"value": entity_id, "label": entity_id} for entity_id in automation_entities
+        ]
+
+        schema = vol.Schema({
+            vol.Required("name", default=current_chore.get("name", "")): str,
+            vol.Optional("description", default=current_chore.get("description", "")): str,
+            vol.Required("assigned_people", default=current_chore.get("assigned_people", [])): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=people_options,
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Required("time_period", default=current_chore.get("time_period", CHORE_PERIOD_ALL_DAY)): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": CHORE_PERIOD_MORNING, "label": "Morning"},
+                        {"value": CHORE_PERIOD_AFTERNOON, "label": "Afternoon"},
+                        {"value": CHORE_PERIOD_EVENING, "label": "Evening"},
+                        {"value": CHORE_PERIOD_ALL_DAY, "label": "All Day"},
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Required("recurrence_type", default=current_chore.get("recurrence", {}).get("type", RECURRENCE_DAILY)): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": RECURRENCE_DAILY, "label": "Daily"},
+                        {"value": RECURRENCE_WEEKLY, "label": "Weekly"},
+                        {"value": RECURRENCE_MONTHLY, "label": "Monthly"},
+                        {"value": RECURRENCE_ONCE, "label": "Once"},
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Optional("required", default=current_chore.get("required", True)): bool,
+            vol.Optional("enabled", default=current_chore.get("enabled", True)): bool,
+            vol.Optional("completion_automation", default=current_chore.get("completion_automation", "")): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=automation_options,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+        })
+
+        return self.async_show_form(
+            step_id="edit_chore",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={
+                "chore_name": current_chore.get("name", "Unknown"),
+                "chore_help": "Edit the chore configuration and settings"
+            },
+        )
+
+    async def async_step_select_chore_to_remove(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Select chore to remove."""
+        if user_input is not None:
+            chore_id = user_input["chore_id"]
+            self._chores.pop(chore_id, None)
+            return await self.async_step_chores()
+
+        chores_options = [
+            {"value": chore_id, "label": chore.get("name", chore_id)}
+            for chore_id, chore in self._chores.items()
+        ]
+
+        if not chores_options:
+            return self.async_show_form(
+                step_id="select_chore_to_remove",
+                errors={"base": "No chores configured to remove."},
+                data_schema=vol.Schema({}),
+            )
+
+        return self.async_show_form(
+            step_id="select_chore_to_remove",
+            data_schema=vol.Schema({
+                vol.Required("chore_id"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=chores_options,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+            }),
+        )
+
     async def _update_options(self) -> FlowResult:
         """Update the options."""
         return self.async_create_entry(
