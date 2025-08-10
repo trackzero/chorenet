@@ -104,6 +104,27 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
         self._current_person_id: str | None = None
         self._current_chore_id: str | None = None
 
+    def _generate_unique_id(self, name: str, existing_ids: list[str]) -> str:
+        """Generate a unique ID from a name."""
+        import re
+        
+        # Convert to lowercase and replace spaces/special chars with underscores
+        base_id = re.sub(r'[^a-z0-9_]', '_', name.lower().strip())
+        base_id = re.sub(r'_+', '_', base_id).strip('_')
+        
+        # If empty, use 'item'
+        if not base_id:
+            base_id = 'item'
+        
+        # Make it unique
+        unique_id = base_id
+        counter = 1
+        while unique_id in existing_ids:
+            unique_id = f"{base_id}_{counter}"
+            counter += 1
+        
+        return unique_id
+
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -143,11 +164,11 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_select_person_to_edit()
             elif action == "remove_person":
                 return await self.async_step_select_person_to_remove()
+            elif action == "list_people":
+                return await self.async_step_list_people()
             elif action == "done":
                 return await self._update_options()
 
-        people_list = [f"{name} ({person_id})" for person_id, person in self._people.items() for name in [person.get("name", person_id)]]
-        
         return self.async_show_form(
             step_id="people",
             data_schema=vol.Schema({
@@ -157,15 +178,13 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
                             {"value": "add_person", "label": "Add Person"},
                             {"value": "edit_person", "label": "Edit Person"},
                             {"value": "remove_person", "label": "Remove Person"},
+                            {"value": "list_people", "label": "List People"},
                             {"value": "done", "label": "Done"},
                         ],
                         mode=selector.SelectSelectorMode.DROPDOWN,
                     )
                 ),
             }),
-            description_placeholders={
-                "people_list": "\n".join(people_list) if people_list else "No people configured"
-            },
         )
 
     async def async_step_add_person(
@@ -175,28 +194,18 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            person_id = user_input["person_id"].lower().replace(" ", "_")
+            # Auto-generate person_id from name
+            name = user_input["name"]
+            person_id = self._generate_unique_id(name, self._people.keys())
             
-            if person_id in self._people:
-                errors["person_id"] = "Person ID already exists"
-            else:
-                # Get automation entities for per-person completion
-                automation_entities = [
-                    entity.entity_id for entity in self.hass.states.async_all()
-                    if entity.entity_id.startswith("automation.")
-                ]
-                automation_options = [{"value": "", "label": "None"}] + [
-                    {"value": entity_id, "label": entity_id} for entity_id in automation_entities
-                ]
-                
-                self._people[person_id] = {
-                    "name": user_input["name"],
-                    "person_id": person_id,
-                    "time_windows": DEFAULT_TIME_WINDOWS.copy(),
-                    "completion_automation": user_input.get("completion_automation"),
-                }
-                self._current_person_id = person_id
-                return await self.async_step_configure_time_windows()
+            self._people[person_id] = {
+                "name": name,
+                "person_id": person_id,
+                "time_windows": DEFAULT_TIME_WINDOWS.copy(),
+                "completion_automation": user_input.get("completion_automation"),
+            }
+            self._current_person_id = person_id
+            return await self.async_step_configure_time_windows()
 
         # Get automation entities for selection
         automation_entities = [
@@ -211,7 +220,6 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
             step_id="add_person",
             data_schema=vol.Schema({
                 vol.Required("name"): str,
-                vol.Required("person_id"): str,
                 vol.Optional("completion_automation"): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=automation_options,
@@ -221,8 +229,7 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
             }),
             errors=errors,
             description_placeholders={
-                "name_help": "The display name for this person (e.g., 'Alice', 'Mom', 'Kid1')",
-                "person_id_help": "A unique identifier for this person. Use lowercase letters and underscores only (e.g., 'alice', 'mom', 'kid_1'). This cannot be changed later.",
+                "name_help": "The display name for this person (e.g., 'Alice', 'Mom', 'Kid1'). The ID will be auto-generated from this name.",
                 "automation_help": "Optional: Select an automation to trigger when this person completes ALL their assigned chores."
             },
         )
@@ -277,11 +284,11 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
                 return await self.async_step_select_chore_to_edit()
             elif action == "remove_chore":
                 return await self.async_step_select_chore_to_remove()
+            elif action == "list_chores":
+                return await self.async_step_list_chores()
             elif action == "done":
                 return await self._update_options()
 
-        chores_list = [f"{name} ({chore_id})" for chore_id, chore in self._chores.items() for name in [chore.get("name", chore_id)]]
-        
         return self.async_show_form(
             step_id="chores",
             data_schema=vol.Schema({
@@ -291,15 +298,13 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
                             {"value": "add_chore", "label": "Add Chore"},
                             {"value": "edit_chore", "label": "Edit Chore"},
                             {"value": "remove_chore", "label": "Remove Chore"},
+                            {"value": "list_chores", "label": "List Chores"},
                             {"value": "done", "label": "Done"},
                         ],
                         mode=selector.SelectSelectorMode.DROPDOWN,
                     )
                 ),
             }),
-            description_placeholders={
-                "chores_list": "\n".join(chores_list) if chores_list else "No chores configured"
-            },
         )
 
     async def async_step_add_chore(
@@ -309,43 +314,42 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            chore_id = user_input["chore_id"].lower().replace(" ", "_")
+            # Auto-generate chore_id from name
+            name = user_input["name"]
+            chore_id = self._generate_unique_id(name, self._chores.keys())
             
-            if chore_id in self._chores:
-                errors["chore_id"] = "Chore ID already exists"
+            # Get people options for assignment
+            people_options = [
+                {"value": person_id, "label": person.get("name", person_id)}
+                for person_id, person in self._people.items()
+            ]
+            
+            if not people_options:
+                errors["base"] = "No people configured. Add people first."
             else:
-                # Get people options for assignment
-                people_options = [
-                    {"value": person_id, "label": person.get("name", person_id)}
-                    for person_id, person in self._people.items()
-                ]
+                recurrence_data = {}
+                recurrence_type = user_input["recurrence_type"]
                 
-                if not people_options:
-                    errors["base"] = "No people configured. Add people first."
-                else:
-                    recurrence_data = {}
-                    recurrence_type = user_input["recurrence_type"]
-                    
-                    if recurrence_type == RECURRENCE_WEEKLY:
-                        recurrence_data["weekday"] = user_input.get("weekday", 0)
-                    elif recurrence_type == RECURRENCE_MONTHLY:
-                        recurrence_data["day"] = user_input.get("day", 1)
-                    
-                    self._chores[chore_id] = {
-                        "name": user_input["name"],
-                        "chore_id": chore_id,
-                        "description": user_input.get("description", ""),
-                        "assigned_people": user_input["assigned_people"],
-                        "time_period": user_input["time_period"],
-                        "required": user_input.get("required", True),
-                        "enabled": True,
-                        "recurrence": {
-                            "type": recurrence_type,
-                            **recurrence_data
-                        },
-                        "completion_automation": user_input.get("completion_automation"),
-                    }
-                    return await self.async_step_chores()
+                if recurrence_type == RECURRENCE_WEEKLY:
+                    recurrence_data["weekday"] = user_input.get("weekday", 0)
+                elif recurrence_type == RECURRENCE_MONTHLY:
+                    recurrence_data["day"] = user_input.get("day", 1)
+                
+                self._chores[chore_id] = {
+                    "name": name,
+                    "chore_id": chore_id,
+                    "description": user_input.get("description", ""),
+                    "assigned_people": user_input["assigned_people"],
+                    "time_period": user_input["time_period"],
+                    "required": user_input.get("required", True),
+                    "enabled": True,
+                    "recurrence": {
+                        "type": recurrence_type,
+                        **recurrence_data
+                    },
+                    "completion_automation": user_input.get("completion_automation"),
+                }
+                return await self.async_step_chores()
 
         if errors.get("base"):
             return self.async_show_form(
@@ -369,7 +373,6 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
 
         schema = vol.Schema({
             vol.Required("name"): str,
-            vol.Required("chore_id"): str,
             vol.Optional("description", default=""): str,
             vol.Required("assigned_people"): selector.SelectSelector(
                 selector.SelectSelectorConfig(
@@ -654,6 +657,73 @@ class ChoreNetOptionsFlow(config_entries.OptionsFlow):
                     )
                 ),
             }),
+        )
+
+    async def async_step_list_people(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Display list of configured people."""
+        if user_input is not None:
+            return await self.async_step_people()
+
+        people_details = []
+        for person_id, person in self._people.items():
+            time_windows = person.get("time_windows", {})
+            automation = person.get("completion_automation", "None")
+            
+            details = f"• {person.get('name', person_id)} (ID: {person_id})\n"
+            details += f"  Morning: {time_windows.get('morning_start', '06:00')}-{time_windows.get('morning_end', '12:00')}\n"
+            details += f"  Afternoon: {time_windows.get('afternoon_start', '12:00')}-{time_windows.get('afternoon_end', '18:00')}\n"
+            details += f"  Evening: {time_windows.get('evening_start', '18:00')}-{time_windows.get('evening_end', '22:00')}\n"
+            details += f"  Completion Automation: {automation if automation else 'None'}"
+            
+            people_details.append(details)
+
+        people_list = "\n\n".join(people_details) if people_details else "No people configured"
+
+        return self.async_show_form(
+            step_id="list_people",
+            data_schema=vol.Schema({
+                vol.Required("continue", default=True): bool,
+            }),
+            description_placeholders={
+                "people_details": f"Configured People:\n\n{people_list}"
+            },
+        )
+
+    async def async_step_list_chores(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Display list of configured chores."""
+        if user_input is not None:
+            return await self.async_step_chores()
+
+        chores_details = []
+        for chore_id, chore in self._chores.items():
+            recurrence = chore.get("recurrence", {})
+            assigned_names = [self._people.get(pid, {}).get("name", pid) for pid in chore.get("assigned_people", [])]
+            
+            details = f"• {chore.get('name', chore_id)} (ID: {chore_id})\n"
+            details += f"  Description: {chore.get('description', 'None')}\n"
+            details += f"  Assigned to: {', '.join(assigned_names) if assigned_names else 'No one'}\n"
+            details += f"  Time Period: {chore.get('time_period', 'all_day').replace('_', ' ').title()}\n"
+            details += f"  Recurrence: {recurrence.get('type', 'daily').title()}\n"
+            details += f"  Required: {'Yes' if chore.get('required', True) else 'No'}\n"
+            details += f"  Enabled: {'Yes' if chore.get('enabled', True) else 'No'}\n"
+            details += f"  Completion Automation: {chore.get('completion_automation', 'None') if chore.get('completion_automation') else 'None'}"
+            
+            chores_details.append(details)
+
+        chores_list = "\n\n".join(chores_details) if chores_details else "No chores configured"
+
+        return self.async_show_form(
+            step_id="list_chores",
+            data_schema=vol.Schema({
+                vol.Required("continue", default=True): bool,
+            }),
+            description_placeholders={
+                "chores_details": f"Configured Chores:\n\n{chores_list}"
+            },
         )
 
     async def _update_options(self) -> FlowResult:
